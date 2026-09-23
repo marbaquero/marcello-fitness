@@ -1073,8 +1073,9 @@ function getStreak() {
   return streak;
 }
 
-function getTodayDayNum() {
-  return state.completedDays.length + 1;
+function getTodayWeekDay() {
+  const day = new Date().getDay();
+  return day === 0 ? 7 : day;
 }
 
 function isToday(weekDay) {
