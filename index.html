@@ -7,8 +7,6 @@
 <meta name="apple-mobile-web-app-title" content="Marcello Elite"/>
 <meta name="theme-color" content="#020814"/>
 <title>Marcello Elite — 60 Day Plan</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="./config.js"></script>
 <style>
   :root {
     --bg: #020814;
@@ -965,16 +963,7 @@ const PHASE1_SCHEDULE = [
 ];
 
 // ─── STATE ───────────────────────────────────────────────────────────────────
-// Fuente de verdad: Supabase (tabla kv_store, misma que usa el inventario de
-// medicamentos). localStorage se usa solo como caché local para que la app
-// siga funcionando un instante si no hay internet, y como respaldo para la
-// migración de datos antiguos la primera vez que corre esta versión.
-const SB_KEY = 'marcello_60day_state';
-const sb = (typeof SUPABASE_URL !== 'undefined')
-  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-  : null;
-
-const DEFAULT_STATE = {
+let state = JSON.parse(localStorage.getItem('marcello_state') || 'null') || {
   completedDays: [],
   history: [],
   currentWeight: 143.9,
@@ -983,81 +972,15 @@ const DEFAULT_STATE = {
   checkedExercises: {},
   calLog: []  // [{date, dateKey, calories, protein}]
 };
-
-let state = JSON.parse(localStorage.getItem('marcello_state') || 'null') || { ...DEFAULT_STATE };
+// Ensure calLog exists for old saves
 if (!state.calLog) state.calLog = [];
-
-let _syncFailed = false;
 
 // Quick food running totals for modal
 let _quickCal = 0;
 let _quickProtein = 0;
 
 function save() {
-  // Guardado local inmediato (respuesta instantánea, funciona sin internet)
   localStorage.setItem('marcello_state', JSON.stringify(state));
-  // Sincroniza con Supabase en segundo plano
-  syncToCloud();
-}
-
-async function syncToCloud() {
-  if (!sb) return;
-  try {
-    const { error } = await sb.from('kv_store').upsert({
-      key: SB_KEY,
-      value: state,
-      updated_at: new Date().toISOString()
-    });
-    if (error) throw error;
-    if (_syncFailed) { _syncFailed = false; hideSyncWarning(); }
-  } catch (err) {
-    console.error('Error guardando en la nube:', err);
-    if (!_syncFailed) { _syncFailed = true; showSyncWarning(); }
-  }
-}
-
-function showSyncWarning() {
-  if (document.getElementById('syncWarning')) return;
-  const bar = document.createElement('div');
-  bar.id = 'syncWarning';
-  bar.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#ff4444;color:#fff;font-size:12px;text-align:center;padding:8px;z-index:9999;';
-  bar.textContent = 'No se pudo guardar en la nube — revisa tu conexión. Tus datos quedaron guardados en este teléfono mientras tanto.';
-  document.body.appendChild(bar);
-}
-function hideSyncWarning() {
-  const bar = document.getElementById('syncWarning');
-  if (bar) bar.remove();
-}
-
-async function initState() {
-  if (!sb) { renderAll(); return; }
-  try {
-    const { data, error } = await sb.from('kv_store').select('value').eq('key', SB_KEY).maybeSingle();
-    if (error) throw error;
-
-    if (data && data.value) {
-      // Ya hay datos en la nube — esos mandan.
-      state = data.value;
-      if (!state.calLog) state.calLog = [];
-      localStorage.setItem('marcello_state', JSON.stringify(state));
-    } else {
-      // No hay nada en la nube todavía. Si este teléfono tiene historial
-      // guardado localmente (de antes de este cambio), lo subimos una vez
-      // para no perder el progreso ya registrado.
-      await syncToCloud();
-    }
-  } catch (err) {
-    console.error('Error cargando desde la nube, usando datos locales:', err);
-    showSyncWarning();
-  }
-  renderAll();
-}
-
-function renderAll() {
-  renderStats();
-  renderDays();
-  renderHistory();
-  renderCalLog();
 }
 
 // ─── COMPUTED ────────────────────────────────────────────────────────────────
@@ -1075,7 +998,6 @@ function getStreak() {
 
 function getTodayDayNum() {
   return state.completedDays.length + 1;
-}
 }
 
 function isToday(weekDay) {
@@ -1444,7 +1366,10 @@ document.getElementById('weightModal').addEventListener('click', function(e) {
 });
 
 // ─── INIT ────────────────────────────────────────────────────────────────────
-initState();
+renderStats();
+renderDays();
+renderHistory();
+renderCalLog();
 </script>
 </body>
 </html>
